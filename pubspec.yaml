@@ -1,0 +1,51 @@
+name: holzliste_app
+description: "Digitale Holzaufnahme fuer den Wald-Einsatz, mit OneDrive-Sync nach Excel."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+
+  # Lokale, verschluesselte Datenbank
+  sqflite_sqlcipher: ^2.2.1
+  path_provider: ^2.1.3
+  path: ^1.9.0
+
+  # Sichere Ablage von Tokens (Android Keystore)
+  flutter_secure_storage: ^9.2.2
+
+  # OneDrive-Anmeldung (OAuth2 / PKCE, kein Client-Secret im Code)
+  flutter_appauth: ^6.0.5
+
+  # Netzwerk-Zugriff auf Microsoft Graph
+  http: ^1.2.1
+
+  # WLAN-Erkennung fuer den Sync-Trigger
+  connectivity_plus: ^6.0.3
+
+  # Lesen/Schreiben der Excel-Datei (reines Dart, keine Fremdlizenz)
+  excel: ^4.0.6
+
+  # Optionaler GPS-Standort je Stamm
+  geolocator: ^12.0.0
+
+  # UUIDs fuer stabile, eindeutige Eintrags-IDs (unabhaengig von OneDrive)
+  uuid: ^4.4.0
+
+  # Unkritische lokale Einstellungen (kein Zugangsdaten-Speicher!)
+  shared_preferences: ^2.2.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/templates/Holzliste_Vorlage.xlsx
