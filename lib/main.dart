@@ -48,7 +48,7 @@ class _HomeShellState extends State<HomeShell> {
   int _index = 0;
   final _listKey = GlobalKey<ListScreenState>();
 
-    @override
+  @override
   void initState() {
     super.initState();
     // Sync verzögert starten, damit die Oberfläche immer zuerst erscheint.
@@ -57,8 +57,6 @@ class _HomeShellState extends State<HomeShell> {
         await OneDriveSyncService.instance.trySync();
       } catch (_) {}
     });
-  }
-
   }
 
   void _onEntrySaved() {
