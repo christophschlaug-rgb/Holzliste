@@ -48,11 +48,17 @@ class _HomeShellState extends State<HomeShell> {
   int _index = 0;
   final _listKey = GlobalKey<ListScreenState>();
 
-  @override
+    @override
   void initState() {
     super.initState();
-    // Beim Start einmal versuchen zu synchronisieren, falls WLAN da ist.
-    OneDriveSyncService.instance.trySync();
+    // Sync verzögert starten, damit die Oberfläche immer zuerst erscheint.
+    Future.delayed(const Duration(seconds: 2), () async {
+      try {
+        await OneDriveSyncService.instance.trySync();
+      } catch (_) {}
+    });
+  }
+
   }
 
   void _onEntrySaved() {
