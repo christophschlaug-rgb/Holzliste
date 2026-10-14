@@ -63,8 +63,8 @@ android {
             // Ohne CI-Secrets faellt der lokale Build auf den Debug-Key
             // zurueck, damit `flutter run` weiterhin funktioniert.
             signingConfig = hasKeystore ? signingConfigs.release : signingConfigs.debug
-            minifyEnabled true
-            shrinkResources true
+            minifyEnabled false
+            shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
