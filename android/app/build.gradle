@@ -42,7 +42,7 @@ android {
         // und aeltere Geraete gleichermassen ab.
         minSdkVersion 23
         targetSdkVersion 34
-        manifestPlaceholders = [appAuthRedirectScheme: 'de.holzliste.app']
+        manifestPlaceholders += [appAuthRedirectScheme: 'de.holzliste.app']
         versionCode flutter.versionCode
         versionName flutter.versionName
     }
