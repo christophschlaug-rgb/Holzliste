@@ -74,11 +74,10 @@ class _EntryScreenState extends State<EntryScreen> {
     if (await SettingsService.instance.gpsEnabled) {
       try {
         final pos = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            timeLimit: Duration(seconds: 8),
-          ),
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 8),
         );
+
         lat = pos.latitude;
         lng = pos.longitude;
       } catch (_) {
