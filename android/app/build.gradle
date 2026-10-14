@@ -24,7 +24,7 @@ if (hasKeystore) {
 
 android {
     namespace 'de.holzliste.app'
-    compileSdk 34
+    compileSdk 36
     ndkVersion flutter.ndkVersion
 
     compileOptions {
