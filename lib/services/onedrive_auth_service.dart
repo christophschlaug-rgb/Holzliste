@@ -62,7 +62,8 @@ class OneDriveAuthService {
       ),
     );
 
-    if (result.accessToken == null) return false;
+    if (result == null || result.accessToken == null) return false;
+
 
     await SecureStorageService.instance.saveTokens(
       accessToken: result.accessToken!,
@@ -106,7 +107,8 @@ class OneDriveAuthService {
       ),
     );
 
-    if (result.accessToken == null) return null;
+    if (result == null || result.accessToken == null) return null;
+
 
     await storage.saveTokens(
       accessToken: result.accessToken!,
