@@ -1,7 +1,7 @@
 name: holzliste_app
 description: "Digitale Holzaufnahme fuer den Wald-Einsatz, mit OneDrive-Sync nach Excel."
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -28,8 +28,9 @@ dependencies:
   # WLAN-Erkennung fuer den Sync-Trigger
   connectivity_plus: ^6.0.3
 
-  # Lesen/Schreiben der Excel-Datei (reines Dart, keine Fremdlizenz)
-  excel: ^4.0.6
+  # Gezieltes Aendern der Excel-Datei (ersetzt das frueher genutzte
+  # Paket "excel", das die Datei beim Schreiben beschaedigt hat)
+  archive: ^3.6.1
 
   # Optionaler GPS-Standort je Stamm
   geolocator: ^12.0.0

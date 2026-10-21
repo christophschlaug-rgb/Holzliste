@@ -1,13 +1,13 @@
 import 'dart:typed_data';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:excel/excel.dart' as xls;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 
 import '../models/log_entry.dart';
 import 'db_service.dart';
 import 'onedrive_auth_service.dart';
+import 'xlsx_patcher.dart';
 
 enum SyncStatus { idle, syncing, ok, waitingForWifi, error }
 
@@ -26,6 +26,13 @@ class _ListWork {
   final int stale;
 
   const _ListWork(this.list, this.entries, this.total, this.stale);
+}
+
+/// Heruntergeladene (oder neu angelegte) Excel-Datei.
+class _WorkbookFile {
+  final Uint8List bytes;
+  final bool created;
+  const _WorkbookFile(this.bytes, this.created);
 }
 
 /// Jede Liste hat ihre eigene Excel-Datei im "App-Ordner" von OneDrive
@@ -143,56 +150,51 @@ class OneDriveSyncService {
       );
     }
 
-    final bytes = await _downloadOrCreateWorkbook(token, w.list.fileName);
-    final workbook = xls.Excel.decodeBytes(bytes);
-    final sheet = workbook['Erfassung'];
+    final file = await _downloadOrCreateWorkbook(token, w.list.fileName);
 
-    for (final entry in w.entries) {
-      final row = entry.lfdNr; // Zeilenindex 0 = Kopfzeile
-      _setCell(sheet, 0, row, entry.lfdNr);
-      _setCell(sheet, 1, row, baumartenAnzeige[entry.baumart]);
-      _setCell(sheet, 2, row, entry.laenge);
-      _setCell(sheet, 3, row, entry.durchmesser);
-      _setCell(sheet, 4, row, entry.rinde);
-      _setCell(sheet, 5, row, entry.kommentar);
+    // Wurde die Datei neu angelegt (z. B. weil sie in OneDrive geloescht
+    // wurde), werden alle Eintraege der Liste neu geschrieben.
+    final entries =
+        file.created ? await DbService.instance.all(w.list.id) : w.entries;
+
+    final writes = <int, ErfassungRow>{};
+    for (final entry in entries) {
+      writes[entry.lfdNr + 1] = ErfassungRow(
+        lfdNr: entry.lfdNr,
+        baumart: baumartenAnzeige[entry.baumart] ?? entry.baumart,
+        laenge: entry.laenge,
+        durchmesser: entry.durchmesser,
+        rinde: entry.rinde,
+        kommentar: entry.kommentar,
+      );
     }
 
     // Zeilen leeren, die durch Loeschen/Verschieben frei geworden sind.
-    // Die Nummerierung in Spalte A bleibt wie in der Vorlage stehen.
-    for (var nr = w.total + 1; nr <= w.list.syncedRows; nr++) {
-      for (var col = 1; col <= 5; col++) {
-        _setCell(sheet, col, nr, '');
+    final clears = <int>[];
+    if (!file.created) {
+      for (var nr = w.total + 1; nr <= w.list.syncedRows; nr++) {
+        clears.add(nr + 1);
       }
     }
 
-    final updatedBytes = workbook.encode();
-    if (updatedBytes == null) {
-      throw StateError('Excel-Datei konnte nicht erzeugt werden.');
-    }
-    await _upload(token, w.list.fileName, Uint8List.fromList(updatedBytes));
+    final updated = XlsxPatcher.patchErfassung(
+      file.bytes,
+      writes: writes,
+      clears: clears,
+    );
+    await _upload(token, w.list.fileName, updated);
 
-    for (final entry in w.entries) {
+    for (final entry in entries) {
       await DbService.instance.markSynced(entry);
     }
     await DbService.instance.setSyncedRows(w.list.id, w.total);
-  }
-
-  void _setCell(xls.Sheet sheet, int col, int row, Object? value) {
-    final cell = sheet.cell(
-      xls.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row),
-    );
-    if (value is num) {
-      cell.value = xls.DoubleCellValue(value.toDouble());
-    } else if (value != null) {
-      cell.value = xls.TextCellValue(value.toString());
-    }
   }
 
   Uri _fileUri(String fileName) => Uri.parse(
         '$_graphAppFolder:/${Uri.encodeComponent(fileName)}:/content',
       );
 
-  Future<Uint8List> _downloadOrCreateWorkbook(
+  Future<_WorkbookFile> _downloadOrCreateWorkbook(
     String token,
     String fileName,
   ) async {
@@ -202,7 +204,7 @@ class OneDriveSyncService {
     );
 
     if (resp.statusCode == 200) {
-      return resp.bodyBytes;
+      return _WorkbookFile(resp.bodyBytes, false);
     }
 
     // Nur wenn die Datei sicher nicht existiert (404), wird die Vorlage
@@ -220,7 +222,7 @@ class OneDriveSyncService {
       template.lengthInBytes,
     );
     await _upload(token, fileName, bytes);
-    return bytes;
+    return _WorkbookFile(bytes, true);
   }
 
   Future<void> _upload(String token, String fileName, Uint8List bytes) async {
