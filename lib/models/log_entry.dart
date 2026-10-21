@@ -1,3 +1,44 @@
+/// ID der Standard-Liste (entspricht der bisherigen Datei Holzliste.xlsx).
+const String defaultListId = 'default';
+
+/// Eine Holzliste (z. B. pro Einschlagsort). Jede Liste hat ihre eigene
+/// Excel-Datei im OneDrive-App-Ordner.
+class ListInfo {
+  final String id;
+  final String name;
+  final String fileName;
+  final DateTime createdAt;
+
+  /// Wie viele Zeilen der Excel-Datei beim letzten Sync beschrieben waren.
+  /// Daran erkennt die App, welche Zeilen nach Loeschen/Verschieben
+  /// in der Excel wieder geleert werden muessen.
+  final int syncedRows;
+
+  const ListInfo({
+    required this.id,
+    required this.name,
+    required this.fileName,
+    required this.createdAt,
+    this.syncedRows = 0,
+  });
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'name': name,
+        'file_name': fileName,
+        'created_at': createdAt.toIso8601String(),
+        'synced_rows': syncedRows,
+      };
+
+  factory ListInfo.fromMap(Map<String, Object?> map) => ListInfo(
+        id: map['id'] as String,
+        name: map['name'] as String,
+        fileName: map['file_name'] as String,
+        createdAt: DateTime.parse(map['created_at'] as String),
+        syncedRows: (map['synced_rows'] as int?) ?? 0,
+      );
+}
+
 /// Ein einzelner Baumstamm-Eintrag, entspricht einer Zeile
 /// im Excel-Tabellenblatt "Erfassung".
 class LogEntry {
@@ -5,7 +46,10 @@ class LogEntry {
   /// damit spaetere Korrekturen zuverlaessig wiedergefunden werden.
   final String id;
 
-  /// Fortlaufende Nummer wie in Spalte A ("lfd Nr.").
+  /// Zu welcher Liste der Eintrag gehoert.
+  final String listId;
+
+  /// Fortlaufende Nummer innerhalb der Liste (Spalte A, "lfd Nr.").
   final int lfdNr;
 
   final String baumart;
@@ -25,6 +69,7 @@ class LogEntry {
 
   const LogEntry({
     required this.id,
+    required this.listId,
     required this.lfdNr,
     required this.baumart,
     required this.laenge,
@@ -52,6 +97,7 @@ class LogEntry {
   }) {
     return LogEntry(
       id: id,
+      listId: listId,
       lfdNr: lfdNr ?? this.lfdNr,
       baumart: baumart ?? this.baumart,
       laenge: laenge ?? this.laenge,
@@ -68,6 +114,7 @@ class LogEntry {
 
   Map<String, Object?> toMap() => {
         'id': id,
+        'list_id': listId,
         'lfd_nr': lfdNr,
         'baumart': baumart,
         'laenge': laenge,
@@ -83,6 +130,7 @@ class LogEntry {
 
   factory LogEntry.fromMap(Map<String, Object?> map) => LogEntry(
         id: map['id'] as String,
+        listId: (map['list_id'] as String?) ?? defaultListId,
         lfdNr: map['lfd_nr'] as int,
         baumart: map['baumart'] as String,
         laenge: (map['laenge'] as num).toDouble(),
