@@ -17,7 +17,12 @@ class ActiveListService {
   Future<void>? _initFuture;
 
   /// Laedt die zuletzt genutzte Liste (einmalig, danach sofort fertig).
-  Future<void> ensureInit() => _initFuture ??= _init();
+  Future<void> ensureInit() {
+    return _initFuture ??= _init().catchError((Object e) {
+      _initFuture = null;
+      throw e;
+    });
+  }
 
   Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();

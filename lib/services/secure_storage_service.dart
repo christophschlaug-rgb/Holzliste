@@ -23,9 +23,30 @@ class SecureStorageService {
   static const _refreshTokenKey = 'onedrive_refresh_token';
   static const _tokenExpiryKey = 'onedrive_token_expiry';
 
-  Future<String> getOrCreateDbKey() async {
+  Future<String>? _dbKeyFuture;
+
+  /// Liefert den Datenbank-Schluessel. Gleichzeitige Aufrufe teilen sich
+  /// dasselbe Ergebnis, damit beim allerersten Start nie zwei verschiedene
+  /// Schluessel entstehen. Existiert schon eine Datenbank, wird NIE ein
+  /// neuer Schluessel erzeugt (allowCreate = false), sondern ein Fehler
+  /// gemeldet - ein neuer Schluessel koennte die alten Daten nicht oeffnen.
+  Future<String> getOrCreateDbKey({required bool allowCreate}) {
+    return _dbKeyFuture ??=
+        _loadOrCreateDbKey(allowCreate).catchError((Object e) {
+      _dbKeyFuture = null;
+      throw e;
+    });
+  }
+
+  Future<String> _loadOrCreateDbKey(bool allowCreate) async {
     final existing = await _storage.read(key: _dbKeyKey);
     if (existing != null) return existing;
+
+    if (!allowCreate) {
+      throw StateError(
+        'Der Schlüssel der lokalen Datenbank fehlt im Android-Schlüsselspeicher.',
+      );
+    }
 
     final random = Random.secure();
     final bytes = List<int>.generate(32, (_) => random.nextInt(256));

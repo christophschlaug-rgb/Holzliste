@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_sqlcipher/sqflite.dart';
@@ -13,12 +15,15 @@ class DbService {
   DbService._();
   static final DbService instance = DbService._();
 
-  Database? _db;
+  Future<Database>? _opening;
 
-  Future<Database> get database async {
-    if (_db != null) return _db!;
-    _db = await _open();
-    return _db!;
+  /// Die Datenbank wird nur einmal geoeffnet; gleichzeitige Zugriffe
+  /// (z. B. beim App-Start) teilen sich dasselbe Ergebnis.
+  Future<Database> get database {
+    return _opening ??= _open().catchError((Object e) {
+      _opening = null;
+      throw e;
+    });
   }
 
   Future<Database> _open() async {
@@ -27,7 +32,9 @@ class DbService {
 
     // Der Verschluesselungsschluessel liegt nicht im Code, sondern wird
     // einmalig zufaellig erzeugt und sicher im Android Keystore abgelegt.
-    final password = await SecureStorageService.instance.getOrCreateDbKey();
+    final dbExists = await File(path).exists();
+    final password = await SecureStorageService.instance
+        .getOrCreateDbKey(allowCreate: !dbExists);
 
     return openDatabase(
       path,
