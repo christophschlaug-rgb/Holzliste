@@ -37,6 +37,7 @@ class ListScreenState extends State<ListScreen> {
   List<ListInfo> _lists = [];
   final Set<String> _selected = {};
   String? _loadedListId;
+  String? _error;
 
   bool get _selectionMode => _selected.isNotEmpty;
 
@@ -44,7 +45,7 @@ class ListScreenState extends State<ListScreen> {
   void initState() {
     super.initState();
     ActiveListService.instance.active.addListener(reload);
-    ActiveListService.instance.ensureInit();
+    ActiveListService.instance.ensureInit().catchError((Object _) {});
     reload();
   }
 
@@ -55,22 +56,28 @@ class ListScreenState extends State<ListScreen> {
   }
 
   Future<void> reload() async {
-    final active = ActiveListService.instance.active.value;
-    final lists = await DbService.instance.lists();
-    final entries = active == null
-        ? <LogEntry>[]
-        : await DbService.instance.all(active.id);
-    if (!mounted) return;
-    setState(() {
-      _lists = lists;
-      _entries = entries;
-      // Beim Listenwechsel Markierung zuruecksetzen, sonst nur
-      // Markierungen entfernen, die es nicht mehr gibt.
-      if (_loadedListId != active?.id) _selected.clear();
-      _loadedListId = active?.id;
-      final ids = entries.map((e) => e.id).toSet();
-      _selected.removeWhere((id) => !ids.contains(id));
-    });
+    try {
+      final active = ActiveListService.instance.active.value;
+      final lists = await DbService.instance.lists();
+      final entries = active == null
+          ? <LogEntry>[]
+          : await DbService.instance.all(active.id);
+      if (!mounted) return;
+      setState(() {
+        _error = null;
+        _lists = lists;
+        _entries = entries;
+        // Beim Listenwechsel Markierung zuruecksetzen, sonst nur
+        // Markierungen entfernen, die es nicht mehr gibt.
+        if (_loadedListId != active?.id) _selected.clear();
+        _loadedListId = active?.id;
+        final ids = entries.map((e) => e.id).toSet();
+        _selected.removeWhere((id) => !ids.contains(id));
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    }
   }
 
   void _triggerSync() {
@@ -408,6 +415,21 @@ class ListScreenState extends State<ListScreen> {
     );
   }
 
+  Widget _buildError() {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      color: scheme.errorContainer,
+      padding: const EdgeInsets.all(12),
+      child: Text(
+        'Die lokale Datenbank konnte nicht gelesen werden. '
+        'Bereits synchronisierte Stämme liegen weiterhin in der Excel in OneDrive.\n\n'
+        'Technische Meldung: $_error',
+        style: TextStyle(color: scheme.onErrorContainer),
+      ),
+    );
+  }
+
   Widget _buildEmpty() {
     return const Center(
       child: Padding(
@@ -542,6 +564,7 @@ class ListScreenState extends State<ListScreen> {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        if (_error != null) _buildError(),
         _selectionMode ? _buildSelectionBar() : _buildHeader(),
         const Divider(height: 1),
         Expanded(child: _entries.isEmpty ? _buildEmpty() : _buildList()),

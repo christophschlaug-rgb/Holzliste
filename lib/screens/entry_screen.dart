@@ -82,6 +82,16 @@ class _EntryScreenState extends State<EntryScreen> {
   }
 
   Future<void> _save() async {
+    try {
+      await _saveInner();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      _showError('Speichern nicht möglich: $e');
+    }
+  }
+
+  Future<void> _saveInner() async {
     final laenge = double.tryParse(_laengeCtrl.text.replaceAll(',', '.'));
     final durchmesser =
         double.tryParse(_durchmesserCtrl.text.replaceAll(',', '.'));
