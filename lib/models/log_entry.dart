@@ -14,12 +14,16 @@ class ListInfo {
   /// in der Excel wieder geleert werden muessen.
   final int syncedRows;
 
+  /// Abgeschlossene Listen sind gesperrt und nur noch lesbar.
+  final bool closed;
+
   const ListInfo({
     required this.id,
     required this.name,
     required this.fileName,
     required this.createdAt,
     this.syncedRows = 0,
+    this.closed = false,
   });
 
   Map<String, Object?> toMap() => {
@@ -28,6 +32,7 @@ class ListInfo {
         'file_name': fileName,
         'created_at': createdAt.toIso8601String(),
         'synced_rows': syncedRows,
+        'closed': closed ? 1 : 0,
       };
 
   factory ListInfo.fromMap(Map<String, Object?> map) => ListInfo(
@@ -36,6 +41,7 @@ class ListInfo {
         fileName: map['file_name'] as String,
         createdAt: DateTime.parse(map['created_at'] as String),
         syncedRows: (map['synced_rows'] as int?) ?? 0,
+        closed: (map['closed'] as int?) == 1,
       );
 }
 
