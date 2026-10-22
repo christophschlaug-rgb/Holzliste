@@ -6,6 +6,7 @@ import 'db_service.dart';
 
 /// Merkt sich, in welche Liste gerade erfasst wird. Erfassung und Liste
 /// greifen beide darauf zu, damit sie immer dieselbe Liste zeigen.
+/// Aktiv kann nur eine OFFENE Liste sein (abgeschlossene sind gesperrt).
 class ActiveListService {
   ActiveListService._();
   static final ActiveListService instance = ActiveListService._();
@@ -28,12 +29,13 @@ class ActiveListService {
     final prefs = await SharedPreferences.getInstance();
     final savedId = prefs.getString(_key);
     final all = await DbService.instance.lists();
+    final open = all.where((l) => !l.closed).toList();
 
     ListInfo? selected;
-    for (final l in all) {
+    for (final l in open) {
       if (l.id == savedId) selected = l;
     }
-    selected ??= all.isNotEmpty ? all.first : null;
+    selected ??= open.isNotEmpty ? open.first : null;
     active.value = selected;
   }
 
@@ -47,5 +49,28 @@ class ActiveListService {
     final info = await DbService.instance.createList(name);
     await select(info);
     return info;
+  }
+
+  /// Nach Umbenennen, Abschliessen, Wiederoeffnen oder Loeschen aufrufen:
+  /// uebernimmt geaenderte Daten der aktiven Liste bzw. waehlt eine andere
+  /// offene Liste, falls die bisherige nicht mehr offen ist.
+  Future<void> refreshSelection() async {
+    final all = await DbService.instance.lists();
+    final open = all.where((l) => !l.closed).toList();
+    final current = active.value;
+
+    if (current != null) {
+      for (final l in open) {
+        if (l.id == current.id) {
+          active.value = l;
+          return;
+        }
+      }
+    }
+    if (open.isNotEmpty) {
+      await select(open.first);
+    } else {
+      active.value = null;
+    }
   }
 }

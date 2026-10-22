@@ -39,7 +39,7 @@ class DbService {
     return openDatabase(
       path,
       password: password,
-      version: 3,
+      version: 4,
       onCreate: (db, version) async {
         await _createEntriesTable(db);
         await _createListsTable(db);
@@ -53,10 +53,17 @@ class DbService {
           await db.execute(
             "ALTER TABLE entries ADD COLUMN list_id TEXT NOT NULL DEFAULT '$defaultListId'",
           );
-        } else if (oldVersion < 3) {
-          await db.execute(
-            'ALTER TABLE lists ADD COLUMN synced_rows INTEGER NOT NULL DEFAULT 0',
-          );
+        } else {
+          if (oldVersion < 3) {
+            await db.execute(
+              'ALTER TABLE lists ADD COLUMN synced_rows INTEGER NOT NULL DEFAULT 0',
+            );
+          }
+          if (oldVersion < 4) {
+            await db.execute(
+              'ALTER TABLE lists ADD COLUMN closed INTEGER NOT NULL DEFAULT 0',
+            );
+          }
         }
         if (oldVersion < 3) {
           // Bereits uebertragene Zeilen je Liste uebernehmen.
@@ -98,7 +105,8 @@ class DbService {
         name TEXT NOT NULL,
         file_name TEXT NOT NULL,
         created_at TEXT NOT NULL,
-        synced_rows INTEGER NOT NULL DEFAULT 0
+        synced_rows INTEGER NOT NULL DEFAULT 0,
+        closed INTEGER NOT NULL DEFAULT 0
       )
     ''');
   }
@@ -127,11 +135,16 @@ class DbService {
     final existing = await lists();
     final usedFiles = existing.map((l) => l.fileName.toLowerCase()).toSet();
 
+    // Dateiname mit Anlagedatum: so kann eine neue Liste nie versehentlich
+    // eine alte Excel-Datei gleichen Namens in OneDrive weiterbenutzen.
+    final now = DateTime.now();
+    final date = '${now.year}-${now.month.toString().padLeft(2, '0')}'
+        '-${now.day.toString().padLeft(2, '0')}';
     final base = _sanitizeFileName(name);
-    var fileName = 'Holzliste - $base.xlsx';
+    var fileName = 'Holzliste - $base $date.xlsx';
     var counter = 2;
     while (usedFiles.contains(fileName.toLowerCase())) {
-      fileName = 'Holzliste - $base ($counter).xlsx';
+      fileName = 'Holzliste - $base $date ($counter).xlsx';
       counter++;
     }
 
@@ -152,6 +165,47 @@ class DbService {
         .replaceAll(RegExp(r'\s+'), ' ');
     if (cleaned.length > 60) cleaned = cleaned.substring(0, 60).trim();
     return cleaned.isEmpty ? 'Liste' : cleaned;
+  }
+
+  /// Benennt eine Liste um. Der Dateiname der Excel in OneDrive bleibt
+  /// bewusst unveraendert, damit die Synchronisation stabil bleibt.
+  Future<void> renameList(String id, String name) async {
+    final db = await database;
+    await db.update(
+      'lists',
+      {'name': name.trim()},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> setListClosed(String id, bool closed) async {
+    final db = await database;
+    await db.update(
+      'lists',
+      {'closed': closed ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Loescht eine Liste samt aller Stamm-Eintraege von diesem Geraet.
+  /// Die Excel-Datei in OneDrive wird nie angefasst.
+  Future<void> deleteList(String id) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('entries', where: 'list_id = ?', whereArgs: [id]);
+      await txn.delete('lists', where: 'id = ?', whereArgs: [id]);
+    });
+  }
+
+  Future<int> countUnsyncedEntries(String listId) async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM entries WHERE list_id = ? AND synced = 0',
+      [listId],
+    );
+    return (result.first['c'] as int?) ?? 0;
   }
 
   Future<void> setSyncedRows(String listId, int rows) async {
