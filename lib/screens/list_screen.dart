@@ -6,6 +6,7 @@ import '../services/active_list_service.dart';
 import '../services/db_service.dart';
 import '../services/onedrive_sync_service.dart';
 import '../services/volume_calculator.dart';
+import 'closed_lists_screen.dart';
 import 'entry_screen.dart';
 
 /// Zahl mit deutschem Dezimalkomma.
@@ -36,6 +37,7 @@ class ListScreenState extends State<ListScreen> {
   List<LogEntry> _entries = [];
   List<ListInfo> _lists = [];
   final Set<String> _selected = {};
+  int _closedCount = 0;
   String? _loadedListId;
   String? _error;
 
@@ -58,14 +60,15 @@ class ListScreenState extends State<ListScreen> {
   Future<void> reload() async {
     try {
       final active = ActiveListService.instance.active.value;
-      final lists = await DbService.instance.lists();
+      final allLists = await DbService.instance.lists();
       final entries = active == null
           ? <LogEntry>[]
           : await DbService.instance.all(active.id);
       if (!mounted) return;
       setState(() {
         _error = null;
-        _lists = lists;
+        _lists = allLists.where((l) => !l.closed).toList();
+        _closedCount = allLists.where((l) => l.closed).length;
         _entries = entries;
         // Beim Listenwechsel Markierung zuruecksetzen, sonst nur
         // Markierungen entfernen, die es nicht mehr gibt.
@@ -97,12 +100,16 @@ class ListScreenState extends State<ListScreen> {
 
   // ---------------------------------------------------------------- Listen
 
-  Future<void> _createList() async {
-    final controller = TextEditingController();
-    final name = await showDialog<String>(
+  Future<String?> _askListName({
+    required String title,
+    required String confirmLabel,
+    String initial = '',
+  }) {
+    final controller = TextEditingController(text: initial);
+    return showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Neue Liste anlegen'),
+        title: Text(title),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -120,16 +127,89 @@ class ListScreenState extends State<ListScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('Anlegen'),
+            child: Text(confirmLabel),
           ),
         ],
       ),
     );
+  }
 
+  Future<void> _createList() async {
+    final name = await _askListName(
+      title: 'Neue Liste anlegen',
+      confirmLabel: 'Anlegen',
+    );
     if (name == null || name.isEmpty) return;
     await ActiveListService.instance.createAndSelect(name);
     await reload();
     _snack('Liste "$name" angelegt');
+  }
+
+  Future<void> _renameActiveList() async {
+    final active = ActiveListService.instance.active.value;
+    if (active == null) return;
+    final name = await _askListName(
+      title: 'Liste umbenennen',
+      confirmLabel: 'Umbenennen',
+      initial: active.name,
+    );
+    if (name == null || name.isEmpty || name == active.name) return;
+    await DbService.instance.renameList(active.id, name);
+    await ActiveListService.instance.refreshSelection();
+    await reload();
+    _snack('Liste umbenannt in "$name"');
+  }
+
+  Future<void> _closeActiveList() async {
+    final active = ActiveListService.instance.active.value;
+    if (active == null) return;
+
+    if (_lists.length < 2) {
+      _snack(
+        'Es muss mindestens eine offene Liste geben. '
+        'Lege zuerst über das Symbol oben rechts eine neue Liste an.',
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Liste "${active.name}" abschließen?'),
+        content: const Text(
+          'Eine abgeschlossene Liste lässt sich nicht mehr ändern. '
+          'Du findest sie unter "Abgeschlossene Listen" und kannst sie dort '
+          'jederzeit wieder öffnen.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Abschließen'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await DbService.instance.setListClosed(active.id, true);
+    _selected.clear();
+    await ActiveListService.instance.refreshSelection();
+    await reload();
+    _triggerSync();
+    _snack('Liste "${active.name}" abgeschlossen');
+  }
+
+  Future<void> _openClosedLists() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ClosedListsScreen()),
+    );
+    // Es kann etwas wieder geoeffnet oder geloescht worden sein.
+    await ActiveListService.instance.refreshSelection();
+    await reload();
   }
 
   // ------------------------------------------------- Aktionen auf Auswahl
@@ -346,6 +426,31 @@ class ListScreenState extends State<ListScreen> {
             tooltip: 'Neue Liste anlegen',
             icon: const Icon(Icons.playlist_add, size: 30),
             onPressed: _createList,
+          ),
+          PopupMenuButton<String>(
+            onSelected: (v) {
+              if (v == 'rename') {
+                _renameActiveList();
+              } else if (v == 'close') {
+                _closeActiveList();
+              } else if (v == 'closed') {
+                _openClosedLists();
+              }
+            },
+            itemBuilder: (context) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(
+                value: 'rename',
+                child: Text('Liste umbenennen …'),
+              ),
+              const PopupMenuItem<String>(
+                value: 'close',
+                child: Text('Liste abschließen …'),
+              ),
+              PopupMenuItem<String>(
+                value: 'closed',
+                child: Text('Abgeschlossene Listen ($_closedCount)'),
+              ),
+            ],
           ),
         ],
       ),
